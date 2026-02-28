@@ -18,9 +18,10 @@ public class CardTransferTest {
 
     @BeforeAll
     static void setupAll() {
-        Configuration.headless = false;
-        Configuration.timeout = 15000;
         startSUT();
+    }
+
+    private static void startSUT() {
     }
 
     @BeforeEach
@@ -42,6 +43,9 @@ public class CardTransferTest {
     static void tearDownAll() {
         stopSUT();
         closeWebDriver();
+    }
+
+    private static void stopSUT() {
     }
 
 
@@ -100,43 +104,32 @@ public class CardTransferTest {
     @Test
     void shouldNotAllowNegativeBalance() {
 
+
         String card1 = DataHelper.getCard1();
         String card2 = DataHelper.getCard2();
 
         String masked1 = DataHelper.getMaskedCard(card1);
         String masked2 = DataHelper.getMaskedCard(card2);
 
-        int balance2 = dashboard.getCardBalance(masked2);
 
-        int amount = balance2 + 1000;
+        int balance1Before = dashboard.getCardBalance(masked1);
+        int balance2Before = dashboard.getCardBalance(masked2);
+
+        int amount = balance2Before + 1000;
+
 
         dashboard = dashboard
                 .selectCard(masked1)
                 .transfer(amount, card2);
 
-        int finalBalance2 = dashboard.getCardBalance(masked2);
+        int balance1After = dashboard.getCardBalance(masked1);
+        int balance2After = dashboard.getCardBalance(masked2);
 
-        assertTrue(finalBalance2 >= 0,
-                "Баланс стал отрицательным! Приложение допускает уход в минус.");
+        assertEquals(balance1Before, balance1After,
+                "Баланс первой карты изменился! Операция с недопустимой суммой обработана.");
+        assertEquals(balance2Before, balance2After,
+                "Баланс второй карты изменился! Операция с недопустимой суммой обработана.");
     }
 
-    private static void startSUT() {
-        try {
-            sutProcess = new ProcessBuilder(
-                    "java",
-                    "-jar",
-                    "./artifacts/app-ibank-build-for-testers.jar"
-            ).start();
-
-            Thread.sleep(7000);
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static void stopSUT() {
-        if (sutProcess != null && sutProcess.isAlive()) {
-            sutProcess.destroy();
-        }
-    }
+    
 }
