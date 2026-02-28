@@ -2,55 +2,40 @@ package ru.netology.test;
 
 import com.codeborne.selenide.Configuration;
 import org.junit.jupiter.api.*;
-import org.openqa.selenium.chrome.ChromeOptions;
+import ru.netology.test.data.DataHelper;
 import ru.netology.test.pages.*;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
-import static com.codeborne.selenide.Selenide.closeWebDriver;
-import static com.codeborne.selenide.Selenide.open;
+import static com.codeborne.selenide.Selenide.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CardTransferTest {
-    private LoginPage loginPage;
-    private DashboardPage dashboardPage;
-    private static Process sutProcess;
 
-    private static final String LOGIN = "vasya";
-    private static final String PASSWORD = "qwerty123";
-    private static final String VERIFICATION_CODE = "12345";
-    private static final String CARD1 = "5559 0000 0000 0001";
-    private static final String CARD2 = "5559 0000 0000 0002";
+    private static Process sutProcess;
+    private DashboardPage dashboard;
 
     @BeforeAll
-    static void setUpAll() {
+    static void setupAll() {
         Configuration.headless = false;
-        Configuration.browser = "chrome";
-        Configuration.browserSize = "1920x1080";
         Configuration.timeout = 15000;
-
-        Map<String, Object> prefs = new HashMap<>();
-        prefs.put("credentials_enable_service", false);
-        prefs.put("profile.password_manager_enabled", false);
-        prefs.put("profile.password_manager_leak_detection", false);
-
-        ChromeOptions options = new ChromeOptions();
-        options.setExperimentalOption("prefs", prefs);
-        options.addArguments("--disable-save-password-bubble");
-
-        Configuration.browserCapabilities = options;
-
         startSUT();
     }
 
     @BeforeEach
-    void setUp() {
-        loginPage = open("http://localhost:9999", LoginPage.class);
-        var verificationPage = loginPage.validLogin(LOGIN, PASSWORD);
-        dashboardPage = verificationPage.validVerify(VERIFICATION_CODE);
+    void setup() {
+        open("http://localhost:9999");
+
+        var loginPage = new LoginPage();
+        var verificationPage = loginPage.login(
+                DataHelper.getLogin(),
+                DataHelper.getPassword()
+        );
+
+        dashboard = verificationPage.verify(
+                DataHelper.getVerificationCode()
+        );
     }
 
     @AfterAll
@@ -59,87 +44,99 @@ public class CardTransferTest {
         closeWebDriver();
     }
 
+
+    @Test
+    void shouldTransferFromCard2ToCard1() {
+
+        String card1 = DataHelper.getCard1();
+        String card2 = DataHelper.getCard2();
+
+        String masked1 = DataHelper.getMaskedCard(card1);
+        String masked2 = DataHelper.getMaskedCard(card2);
+
+        int balance1 = dashboard.getCardBalance(masked1);
+        int balance2 = dashboard.getCardBalance(masked2);
+
+        int amount = DataHelper.calculateTransferAmount(balance2);
+
+        dashboard = dashboard
+                .selectCard(masked1)
+                .transfer(amount, card2);
+
+        assertEquals(balance1 + amount,
+                dashboard.getCardBalance(masked1));
+
+        assertEquals(balance2 - amount,
+                dashboard.getCardBalance(masked2));
+    }
+
+
+    @Test
+    void shouldTransferFromCard1ToCard2() {
+
+        String card1 = DataHelper.getCard1();
+        String card2 = DataHelper.getCard2();
+
+        String masked1 = DataHelper.getMaskedCard(card1);
+        String masked2 = DataHelper.getMaskedCard(card2);
+
+        int balance1 = dashboard.getCardBalance(masked1);
+        int balance2 = dashboard.getCardBalance(masked2);
+
+        int amount = DataHelper.calculateTransferAmount(balance1);
+
+        dashboard = dashboard
+                .selectCard(masked2)
+                .transfer(amount, card1);
+
+        assertEquals(balance1 - amount,
+                dashboard.getCardBalance(masked1));
+
+        assertEquals(balance2 + amount,
+                dashboard.getCardBalance(masked2));
+    }
+
+
+    @Test
+    void shouldNotAllowNegativeBalance() {
+
+        String card1 = DataHelper.getCard1();
+        String card2 = DataHelper.getCard2();
+
+        String masked1 = DataHelper.getMaskedCard(card1);
+        String masked2 = DataHelper.getMaskedCard(card2);
+
+        int balance2 = dashboard.getCardBalance(masked2);
+
+        int amount = balance2 + 1000;
+
+        dashboard = dashboard
+                .selectCard(masked1)
+                .transfer(amount, card2);
+
+        int finalBalance2 = dashboard.getCardBalance(masked2);
+
+        assertTrue(finalBalance2 >= 0,
+                "Баланс стал отрицательным! Приложение допускает уход в минус.");
+    }
+
     private static void startSUT() {
         try {
-            ProcessBuilder pb = new ProcessBuilder(
+            sutProcess = new ProcessBuilder(
                     "java",
                     "-jar",
                     "./artifacts/app-ibank-build-for-testers.jar"
-            );
-            sutProcess = pb.start();
-            Thread.sleep(8000);
+            ).start();
+
+            Thread.sleep(7000);
         } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("Failed to start SUT", e);
+            throw new RuntimeException(e);
         }
     }
 
     private static void stopSUT() {
         if (sutProcess != null && sutProcess.isAlive()) {
             sutProcess.destroy();
-            try {
-                sutProcess.waitFor(5000, java.util.concurrent.TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                sutProcess.destroyForcibly();
-            }
         }
-    }
-
-    /**
-     * Перевод 100 рублей с карты 2 на карту 1
-     */
-    @Test
-    void shouldTransfer100FromCard2ToCard1() {
-        int initialBalance1 = dashboardPage.getCardBalance(CARD1);
-        int initialBalance2 = dashboardPage.getCardBalance(CARD2);
-        int transferAmount = 100;
-
-        var transferPage = dashboardPage.selectCardToTransfer(CARD1);
-        dashboardPage = transferPage.validTransfer(transferAmount, CARD2);
-
-        int finalBalance1 = dashboardPage.getCardBalance(CARD1);
-        int finalBalance2 = dashboardPage.getCardBalance(CARD2);
-
-        assertEquals(initialBalance1 + transferAmount, finalBalance1);
-        assertEquals(initialBalance2 - transferAmount, finalBalance2);
-    }
-
-    /**
-     * Перевод 500 рублей с карты 1 на карту 2
-     */
-    @Test
-    void shouldTransfer500FromCard1ToCard2() {
-        int initialBalance1 = dashboardPage.getCardBalance(CARD1);
-        int initialBalance2 = dashboardPage.getCardBalance(CARD2);
-        int transferAmount = 500;
-
-        var transferPage = dashboardPage.selectCardToTransfer(CARD2);
-        dashboardPage = transferPage.validTransfer(transferAmount, CARD1);
-
-        int finalBalance1 = dashboardPage.getCardBalance(CARD1);
-        int finalBalance2 = dashboardPage.getCardBalance(CARD2);
-
-        assertEquals(initialBalance1 - transferAmount, finalBalance1);
-        assertEquals(initialBalance2 + transferAmount, finalBalance2);
-    }
-
-    /**
-     * Перевод 1000 рублей с карты 2 на карту 1
-     */
-    @Test
-    void shouldTransfer1000FromCard2ToCard1() {
-        int initialBalance1 = dashboardPage.getCardBalance(CARD1);
-        int initialBalance2 = dashboardPage.getCardBalance(CARD2);
-        int transferAmount = 1000;
-
-        var transferPage = dashboardPage.selectCardToTransfer(CARD1);
-        dashboardPage = transferPage.validTransfer(transferAmount, CARD2);
-
-        int finalBalance1 = dashboardPage.getCardBalance(CARD1);
-        int finalBalance2 = dashboardPage.getCardBalance(CARD2);
-
-        assertEquals(initialBalance1 + transferAmount, finalBalance1);
-        assertEquals(initialBalance2 - transferAmount, finalBalance2);
-        assertTrue(finalBalance1 >= 0);
-        assertTrue(finalBalance2 >= 0);
     }
 }
