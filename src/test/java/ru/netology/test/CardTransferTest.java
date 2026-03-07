@@ -13,20 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CardTransferTest {
 
-    private static Process sutProcess;
     private DashboardPage dashboard;
 
     @BeforeAll
     static void setupAll() {
-        startSUT();
-    }
-
-    private static void startSUT() {
+        Configuration.baseUrl = "http://localhost:9999";
     }
 
     @BeforeEach
     void setup() {
-        open("http://localhost:9999");
+        open("/");
 
         var loginPage = new LoginPage();
         var verificationPage = loginPage.login(
@@ -39,14 +35,6 @@ public class CardTransferTest {
         );
     }
 
-    @AfterAll
-    static void tearDownAll() {
-        stopSUT();
-        closeWebDriver();
-    }
-
-    private static void stopSUT() {
-    }
 
 
     @Test

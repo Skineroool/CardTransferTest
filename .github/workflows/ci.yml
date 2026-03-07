@@ -22,5 +22,18 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run SUT
+        run: |
+          java -jar artifacts/app-ibank-build-for-testers.jar &
+        env:
+          APP_PORT: 9999
+
       - name: Run tests
         run: ./gradlew test --info -Dselenide.headless=true
+        env:
+          APP_URL: http://localhost:9999
+
+      - name: Stop SUT
+        if: always()
+        run: |
+          pkill -f artifacts/app-ibank-build-for-testers.jar || true
